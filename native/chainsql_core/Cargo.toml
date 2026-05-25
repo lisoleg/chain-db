@@ -1,0 +1,20 @@
+[package]
+name = "chainsql-core"
+version = "0.1.0"
+edition = "2021"
+description = "ChainDB consensus core acceleration via PyO3"
+
+[lib]
+name = "chainsql_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"] }
+sha2 = "0.10"
+rustc-hash = "2.0"
+rayon = "1.10"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true

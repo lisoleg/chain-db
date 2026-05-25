@@ -1,0 +1,40 @@
+sequenceDiagram
+    participant Client
+    participant RPCHandler
+    participant SQLConverter
+    participant SQLParser
+    participant SQLValidator
+    participant Mempool
+    participant POPConsensus
+    participant P2PNetwork
+    participant Ledger
+    participant TableSync
+    participant Database
+
+    Client->>RPCHandler: sql_submit({sql, account})
+    RPCHandler->>SQLConverter: to_transaction(sql, account, tx_type)
+    SQLConverter->>SQLParser: parse(sql)
+    SQLParser-->>SQLConverter: ParsedSQL
+    SQLConverter->>SQLValidator: validate(parsed, registry)
+    SQLValidator-->>SQLConverter: valid=True
+    SQLConverter-->>RPCHandler: Transaction
+    RPCHandler->>Mempool: add(transaction)
+    RPCHandler-->>Client: {tx_hash, status: "queued"}
+
+    Note over POPConsensus: Leader 定时触发共识
+    POPConsensus->>Mempool: get_all()
+    POPConsensus->>POPConsensus: build_proposal(transactions)
+    POPConsensus->>P2PNetwork: broadcast(PROPOSAL)
+
+    Note over POPConsensus: 交易集共识
+    P2PNetwork-->>POPConsensus: votes collected (>2/3)
+    POPConsensus->>POPConsensus: build_block(consensus_tx_set)
+    POPConsensus->>P2PNetwork: broadcast(NEW_BLOCK)
+
+    P2PNetwork-->>POPConsensus: block votes (>2/3)
+    POPConsensus->>Ledger: append_block(block)
+
+    Note over TableSync: 监听新区块
+    Ledger-->>TableSync: on_new_block(block)
+    TableSync->>Database: execute(sql_from_transaction)
+    TableSync->>TableSync: update_sync_height()

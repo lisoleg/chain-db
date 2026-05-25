@@ -1,0 +1,249 @@
+classDiagram
+    class Transaction {
+        +str tx_hash
+        +TxType tx_type
+        +str account
+        +dict payload
+        +int sequence
+        +str raw_sql
+        +compute_hash() str
+        +serialize() bytes
+        +deserialize(data: bytes) Transaction
+    }
+
+    class Block {
+        +int block_number
+        +str block_hash
+        +str prev_hash
+        +list~Transaction~ transactions
+        +str state_root
+        +int timestamp
+        +str proposer
+        +compute_hash() str
+        +compute_tx_root() str
+    }
+
+    class Ledger {
+        +dict~int, Block~ blocks
+        +Block last_block
+        +int height
+        +append_block(block: Block) void
+        +get_block(number: int) Block
+        +get_transaction(tx_hash: str) Transaction
+        +compute_state_root() str
+    }
+
+    class Mempool {
+        +list~Transaction~ pending
+        +add(tx: Transaction) void
+        +remove(tx_hash: str) void
+        +get_all() list~Transaction~
+        +clear() void
+    }
+
+    class SQLParser {
+        +parse(sql: str) ParsedSQL
+        +validate(sql: str) bool
+    }
+
+    class ParsedSQL {
+        +SQLType sql_type
+        +str table_name
+        +dict data
+        +str where_clause
+    }
+
+    class SQLValidator {
+        +validate_create(parsed: ParsedSQL, registry: TableRegistry) bool
+        +validate_insert(parsed: ParsedSQL, registry: TableRegistry) bool
+        +validate_update(parsed: ParsedSQL, registry: TableRegistry) bool
+        +validate_delete(parsed: ParsedSQL, registry: TableRegistry) bool
+    }
+
+    class SQLConverter {
+        +to_transaction(sql: str, account: str, tx_type: TxType) Transaction
+        +to_transaction_batch(sqls: list~str~, account: str) Transaction
+    }
+
+    class POPConsensus {
+        +Node self_node
+        +Mempool mempool
+        +Ledger ledger
+        +bool is_leader
+        +start() void
+        +stop() void
+        +on_proposal(proposal: Proposal) void
+        +on_vote(vote: Vote) void
+        +on_block(block: Block) void
+    }
+
+    class Proposal {
+        +str proposal_id
+        +str proposer
+        +list~Transaction~ transactions
+        +int round
+        +int timestamp
+    }
+
+    class Vote {
+        +str proposal_id
+        +str voter
+        +bool approve
+        +str signature
+    }
+
+    class P2PNetwork {
+        +str node_id
+        +list~Node~ peers
+        +start(host: str, port: int) void
+        +stop() void
+        +broadcast(message: Message) void
+        +send_to(node_id: str, message: Message) void
+        +on_message(callback: Callable) void
+    }
+
+    class Message {
+        +MsgType msg_type
+        +dict payload
+        +str sender
+        +int timestamp
+    }
+
+    class TableSync {
+        +Database database
+        +Ledger ledger
+        +int sync_height
+        +start() void
+        +stop() void
+        +sync_block(block: Block) void
+        +replay_from(height: int) void
+    }
+
+    class StateManager {
+        +int synced_height
+        +dict~str, int~ table_versions
+        +update(height: int) void
+        +get_sync_status() dict
+    }
+
+    class Database {
+        +AsyncEngine engine
+        +AsyncSession session
+        +initialize() void
+        +execute(sql: str) Result
+        +execute_raw(sql: str) Result
+        +close() void
+    }
+
+    class TableRegistry {
+        +dict~str, TableMeta~ tables
+        +register(table_meta: TableMeta) void
+        +unregister(table_name: str) void
+        +get(table_name: str) TableMeta
+        +exists(table_name: str) bool
+    }
+
+    class TableMeta {
+        +str name
+        +str creator
+        +list~ColumnDef~ columns
+        +int version
+        +str create_sql
+    }
+
+    class ColumnDef {
+        +str name
+        +str data_type
+        +bool nullable
+        +str default_value
+    }
+
+    class QueryExecutor {
+        +Database database
+        +TableRegistry registry
+        +execute_select(sql: str) QueryResult
+    }
+
+    class QueryResult {
+        +list~str~ columns
+        +list~dict~ rows
+        +int row_count
+    }
+
+    class RPCHandler {
+        +SQLConverter converter
+        +Mempool mempool
+        +QueryExecutor query_executor
+        +Ledger ledger
+        +sql_submit(params: dict) dict
+        +sql_query(params: dict) dict
+        +tx_query(params: dict) dict
+        +block_query(params: dict) dict
+    }
+
+    class NodeConfig {
+        +str node_id
+        +str host
+        +int port
+        +list~str~ peers
+        +bool is_leader
+        +int consensus_timeout
+        +int block_interval
+    }
+
+    class TxType {
+        <<enumeration>>
+        SQL_STATEMENT
+        TABLE_LIST_SET
+        SQL_TRANSACTION
+    }
+
+    class SQLType {
+        <<enumeration>>
+        INSERT
+        UPDATE
+        DELETE
+        CREATE_TABLE
+        ALTER_TABLE
+        DROP_TABLE
+    }
+
+    class MsgType {
+        <<enumeration>>
+        PROPOSAL
+        VOTE_TXSET
+        VOTE_BLOCK
+        NEW_BLOCK
+        PEER_DISCOVERY
+        SYNC_REQUEST
+    }
+
+    Transaction --> TxType
+    Transaction --> ParsedSQL
+    Block --> Transaction
+    Ledger --> Block
+    POPConsensus --> Proposal
+    POPConsensus --> Vote
+    POPConsensus --> Mempool
+    POPConsensus --> Ledger
+    POPConsensus --> P2PNetwork
+    Proposal --> Transaction
+    P2PNetwork --> Message
+    Message --> MsgType
+    TableSync --> Database
+    TableSync --> Ledger
+    TableSync --> StateManager
+    Database --> TableRegistry
+    TableRegistry --> TableMeta
+    TableMeta --> ColumnDef
+    QueryExecutor --> Database
+    QueryExecutor --> TableRegistry
+    RPCHandler --> SQLConverter
+    RPCHandler --> Mempool
+    RPCHandler --> QueryExecutor
+    RPCHandler --> Ledger
+    SQLConverter --> SQLParser
+    SQLParser --> ParsedSQL
+    ParsedSQL --> SQLType
+    SQLValidator --> ParsedSQL
+    SQLValidator --> TableRegistry

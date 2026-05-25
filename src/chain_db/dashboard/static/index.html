@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChainDB Dashboard</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; }
+.header { background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 16px 24px; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 16px; }
+.header h1 { font-size: 20px; color: #38bdf8; }
+.header .status { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+.header .badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+.badge-green { background: #065f46; color: #6ee7b7; }
+.badge-yellow { background: #713f12; color: #fde047; }
+.badge-blue { background: #1e3a5f; color: #7dd3fc; }
+.tabs { display: flex; background: #1e293b; border-bottom: 2px solid #334155; overflow-x: auto; }
+.tab { padding: 10px 20px; cursor: pointer; font-size: 14px; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; }
+.tab:hover { color: #38bdf8; }
+.tab.active { color: #38bdf8; border-bottom-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
+.content { padding: 20px; max-width: 1400px; margin: 0 auto; }
+.panel { display: none; }
+.panel.active { display: block; }
+.card { background: #1e293b; border-radius: 8px; padding: 16px; border: 1px solid #334155; margin-bottom: 16px; }
+.card h3 { color: #94a3b8; font-size: 12px; text-transform: uppercase; margin-bottom: 8px; }
+.card .value { font-size: 28px; font-weight: 700; color: #f1f5f9; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 8px 12px; color: #94a3b8; border-bottom: 1px solid #334155; font-weight: 600; }
+td { padding: 8px 12px; border-bottom: 1px solid #1e293b; }
+tr:hover td { background: rgba(56, 189, 248, 0.03); }
+.hash { font-family: 'Fira Code', monospace; font-size: 12px; color: #7dd3fc; }
+.sql { font-family: 'Fira Code', monospace; font-size: 11px; color: #a5b4fc; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#graph-container { width: 100%; height: 500px; background: #1e293b; border-radius: 8px; border: 1px solid #334155; }
+.sync-bar { height: 8px; background: #334155; border-radius: 4px; overflow: hidden; }
+.sync-fill { height: 100%; background: linear-gradient(90deg, #38bdf8, #818cf8); border-radius: 4px; transition: width 0.5s; }
+.audit-timeline { position: relative; padding-left: 24px; }
+.audit-timeline::before { content: ''; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: #334155; }
+.audit-item { position: relative; padding: 8px 0 16px; }
+.audit-item::before { content: ''; position: absolute; left: -20px; top: 12px; width: 10px; height: 10px; border-radius: 50%; background: #38bdf8; border: 2px solid #0f172a; }
+.audit-item .time { font-size: 11px; color: #64748b; }
+.audit-item .sql-text { font-family: 'Fira Code', monospace; font-size: 12px; color: #a5b4fc; margin-top: 4px; }
+.loading { text-align: center; padding: 40px; color: #64748b; }
+.btn { padding: 6px 14px; border-radius: 6px; border: 1px solid #334155; background: #1e293b; color: #e2e8f0; cursor: pointer; font-size: 13px; }
+.btn:hover { border-color: #38bdf8; color: #38bdf8; }
+.search-box { display: flex; gap: 8px; margin-bottom: 16px; }
+.search-box input { flex: 1; padding: 8px 12px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: #e2e8f0; font-size: 14px; }
+.search-box input:focus { outline: none; border-color: #38bdf8; }
+.node-label { font-size: 12px; fill: #e2e8f0; pointer-events: none; }
+.edge-label { font-size: 10px; fill: #64748b; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⛓ ChainDB Dashboard</h1>
+  <div class="status">
+    <span class="badge badge-green" id="sync-badge">SYNCED</span>
+    <span class="badge badge-blue" id="height-badge">Height: 0</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-panel="overview">Overview</div>
+  <div class="tab" data-panel="blocks">Blocks</div>
+  <div class="tab" data-panel="sync">Sync Status</div>
+  <div class="tab" data-panel="audit">Audit Trail</div>
+  <div class="tab" data-panel="graph">Knowledge Graph</div>
+  <div class="tab" data-panel="lineage">Data Lineage</div>
+</div>
+
+<div class="content">
+  <!-- Overview Panel -->
+  <div class="panel active" id="panel-overview">
+    <div class="stats" id="stats-grid"></div>
+    <div class="card">
+      <h3>Recent Changes</h3>
+      <table><thead><tr><th>Block</th><th>Type</th><th>Table</th><th>SQL</th><th>Account</th></tr></thead>
+      <tbody id="recent-changes"></tbody></table>
+    </div>
+  </div>
+
+  <!-- Blocks Panel -->
+  <div class="panel" id="panel-blocks">
+    <table><thead><tr><th>Block #</th><th>Hash</th><th>Txns</th><th>Proposer</th><th>Timestamp</th></tr></thead>
+    <tbody id="blocks-list"></tbody></table>
+  </div>
+
+  <!-- Sync Panel -->
+  <div class="panel" id="panel-sync">
+    <div class="card">
+      <h3>Sync Progress</h3>
+      <div class="sync-bar"><div class="sync-fill" id="sync-fill" style="width:0%"></div></div>
+      <p style="margin-top:8px;color:#94a3b8;font-size:13px" id="sync-text">0 / 0 blocks</p>
+    </div>
+    <div class="card">
+      <h3>Table Versions</h3>
+      <table><thead><tr><th>Table</th><th>Version</th></tr></thead>
+      <tbody id="table-versions"></tbody></table>
+    </div>
+  </div>
+
+  <!-- Audit Panel -->
+  <div class="panel" id="panel-audit">
+    <div class="search-box">
+      <input id="audit-table-input" placeholder="Enter table name..." />
+      <button class="btn" onclick="loadAuditTrail()">Search</button>
+    </div>
+    <div class="card"><div class="audit-timeline" id="audit-timeline"></div></div>
+  </div>
+
+  <!-- Knowledge Graph Panel -->
+  <div class="panel" id="panel-graph">
+    <p style="margin-bottom:12px;color:#94a3b8;font-size:13px">Table relationship graph — nodes are tables, edges show co-reference relationships from transaction history.</p>
+    <div id="graph-container"></div>
+  </div>
+
+  <!-- Data Lineage Panel -->
+  <div class="panel" id="panel-lineage">
+    <div class="search-box">
+      <input id="lineage-table-input" placeholder="Enter table name..." />
+      <button class="btn" onclick="loadLineage()">Trace</button>
+    </div>
+    <div id="lineage-container" style="width:100%;height:500px;background:#1e293b;border-radius:8px;border:1px solid #334155;"></div>
+  </div>
+</div>
+
+<script>
+const API = '';
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.panel).classList.add('active');
+    loadPanel(tab.dataset.panel);
+  });
+});
+
+async function api(path) {
+  const res = await fetch(API + path);
+  return res.json();
+}
+
+function timeAgo(ts) {
+  const diff = Date.now()/1000 - ts;
+  if (diff < 60) return Math.floor(diff) + 's ago';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
+async function loadOverview() {
+  const data = await api('/dashboard/overview');
+  document.getElementById('height-badge').textContent = 'Height: ' + data.chain_height;
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="card"><h3>Chain Height</h3><div class="value">${data.chain_height}</div></div>
+    <div class="card"><h3>Total Transactions</h3><div class="value">${data.total_transactions}</div></div>
+    <div class="card"><h3>Mempool Size</h3><div class="value">${data.mempool_size}</div></div>
+    <div class="card"><h3>Tables</h3><div class="value">${data.tables.length}</div></div>
+  `;
+
+  const changes = await api('/dashboard/changes?limit=10');
+  document.getElementById('recent-changes').innerHTML = (changes.changes || []).map(c => `
+    <tr><td>#${c.block_number}</td><td>${c.sql_type || c.tx_type}</td><td>${c.table_name}</td>
+    <td class="sql" title="${(c.raw_sql||'').replace(/"/g,'&quot;')}">${c.raw_sql || '-'}</td><td>${c.account}</td></tr>
+  `).join('') || '<tr><td colspan="5" class="loading">No changes yet</td></tr>';
+}
+
+async function loadBlocks() {
+  const data = await api('/dashboard/blocks?limit=50');
+  document.getElementById('blocks-list').innerHTML = (data.blocks || []).map(b => `
+    <tr><td>#${b.block_number}</td><td class="hash">${b.block_hash}...</td><td>${b.tx_count}</td>
+    <td>${b.proposer}</td><td>${timeAgo(b.timestamp)}</td></tr>
+  `).join('') || '<tr><td colspan="5" class="loading">No blocks</td></tr>';
+}
+
+async function loadSyncStatus() {
+  const data = await api('/dashboard/sync-status');
+  document.getElementById('sync-fill').style.width = data.progress_pct + '%';
+  document.getElementById('sync-text').textContent = `${data.synced_height} / ${data.chain_height} blocks (${data.progress_pct}%)`;
+  document.getElementById('sync-badge').textContent = data.is_synced ? 'SYNCED' : 'SYNCING';
+  document.getElementById('sync-badge').className = 'badge ' + (data.is_synced ? 'badge-green' : 'badge-yellow');
+
+  const versions = data.table_versions;
+  document.getElementById('table-versions').innerHTML = Object.entries(versions).map(([k,v]) => `
+    <tr><td>${k}</td><td>v${v}</td></tr>
+  `).join('') || '<tr><td colspan="2" class="loading">No tables synced</td></tr>';
+}
+
+async function loadAuditTrail() {
+  const table = document.getElementById('audit-table-input').value.trim();
+  if (!table) return;
+  const data = await api('/dashboard/audit/' + table);
+  document.getElementById('audit-timeline').innerHTML = (data.audit_trail || []).map(a => `
+    <div class="audit-item">
+      <div class="time">Block #${a.block_number} · ${a.account} · ${timeAgo(a.timestamp)}</div>
+      <div class="sql-text">${a.raw_sql || (a.sql_type + ' ' + a.table_name)}</div>
+    </div>
+  `).join('') || '<div class="loading">No audit records found</div>';
+}
+
+async function loadGraph() {
+  const data = await api('/dashboard/graph/tables');
+  const container = document.getElementById('graph-container');
+  container.innerHTML = '';
+
+  const width = container.clientWidth;
+  const height = container.clientHeight || 500;
+
+  const svg = d3.select('#graph-container').append('svg')
+    .attr('width', width).attr('height', height);
+
+  const nodes = (data.nodes || []).map(n => ({...n, r: 20 + (n.operation_count || 0) * 2}));
+  const edges = data.edges || [];
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(edges).id(d => d.id).distance(120))
+    .force('charge', d3.forceManyBody().strength(-300))
+    .force('center', d3.forceCenter(width/2, height/2))
+    .force('collision', d3.forceCollide().radius(d => d.r + 10));
+
+  const link = svg.append('g').selectAll('line').data(edges).join('line')
+    .attr('stroke', '#475569').attr('stroke-width', 1.5).attr('stroke-dasharray', '4 2');
+
+  const node = svg.append('g').selectAll('g').data(nodes).join('g')
+    .call(d3.drag().on('start', (e,d) => { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag', (e,d) => { d.fx=e.x; d.fy=e.y; })
+      .on('end', (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
+
+  node.append('circle').attr('r', d => d.r || 24)
+    .attr('fill', '#1e40af').attr('stroke', '#38bdf8').attr('stroke-width', 2);
+
+  node.append('text').attr('class', 'node-label').attr('dy', 4).attr('text-anchor', 'middle')
+    .text(d => d.label);
+
+  node.append('title').text(d => `${d.label}\nColumns: ${(d.columns||[]).join(', ')}\nOps: ${d.operation_count||0}`);
+
+  sim.on('tick', () => {
+    link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+}
+
+async function loadLineage() {
+  const table = document.getElementById('lineage-table-input').value.trim();
+  if (!table) return;
+  const data = await api('/dashboard/graph/lineage/' + table);
+  const container = document.getElementById('lineage-container');
+  container.innerHTML = '';
+
+  const width = container.clientWidth;
+  const height = container.clientHeight || 500;
+
+  const svg = d3.select('#lineage-container').append('svg')
+    .attr('width', width).attr('height', height);
+
+  const colorMap = { target: '#7c3aed', writer: '#059669', upstream: '#2563eb' };
+  const nodes = (data.nodes || []).map(n => ({...n, r: n.type === 'target' ? 32 : 22}));
+  const edges = data.edges || [];
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(edges).id(d => d.id).distance(100))
+    .force('charge', d3.forceManyBody().strength(-400))
+    .force('center', d3.forceCenter(width/2, height/2));
+
+  const arrow = svg.append('defs').append('marker')
+    .attr('id', 'arrowhead').attr('viewBox', '0 -5 10 10').attr('refX', 20)
+    .attr('refY', 0).attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto')
+    .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#64748b');
+
+  const link = svg.append('g').selectAll('line').data(edges).join('line')
+    .attr('stroke', '#64748b').attr('stroke-width', 2).attr('marker-end', 'url(#arrowhead)');
+
+  const node = svg.append('g').selectAll('g').data(nodes).join('g')
+    .call(d3.drag().on('start', (e,d) => { if(!e.active) sim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag', (e,d) => { d.fx=e.x; d.fy=e.y; })
+      .on('end', (e,d) => { if(!e.active) sim.alphaTarget(0); d.fx=null; d.fy=null; }));
+
+  node.append('circle').attr('r', d => d.r || 24)
+    .attr('fill', d => colorMap[d.type] || '#1e40af')
+    .attr('stroke', '#e2e8f0').attr('stroke-width', 2);
+
+  node.append('text').attr('class', 'node-label').attr('dy', 4).attr('text-anchor', 'middle')
+    .text(d => d.label).style('font-size', d => d.type === 'target' ? '13px' : '11px');
+
+  sim.on('tick', () => {
+    link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+        .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+}
+
+const panelLoaders = {
+  overview: loadOverview,
+  blocks: loadBlocks,
+  sync: loadSyncStatus,
+  audit: () => {},
+  graph: loadGraph,
+  lineage: () => {},
+};
+
+function loadPanel(name) {
+  if (panelLoaders[name]) panelLoaders[name]();
+}
+
+// Initial load
+loadOverview();
+</script>
+</body>
+</html>
