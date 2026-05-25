@@ -188,6 +188,37 @@
     padding-left: 24px;
   }
 
+  /* Repository box */
+  .repository-box {
+    background: #f0f7ff;
+    border: 1px solid #c5d9f0;
+    border-radius: 8px;
+    padding: 20px 28px;
+    margin: 20px 0;
+  }
+  .repo-link {
+    display: inline-block;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 15px;
+    font-weight: 600;
+    color: #0366d6;
+    text-decoration: none;
+    margin-bottom: 12px;
+  }
+  .repo-link:hover { text-decoration: underline; }
+  .repo-features {
+    font-size: 13px;
+    color: #555;
+    line-height: 1.8;
+    list-style: none;
+    padding-left: 4px;
+  }
+  .repo-features li::before {
+    content: '✓ ';
+    color: #28a745;
+    font-weight: bold;
+  }
+
   /* Footer */
   .footer {
     margin-top: 50px;
@@ -504,8 +535,25 @@ Sync Plan:
   <p>[13] Taiyi Oracle. "Topological Reasoning Engine for AGI." &Sigma;-Cloud Technical Report, 2026.</p>
 </div>
 
+<h2 id="repository">Repository</h2>
+<div class="repository-box">
+  <a href="https://github.com/lisoleg/chain-db" target="_blank" class="repo-link">
+    <span class="repo-icon">&#128187;</span> github.com/lisoleg/chain-db
+  </a>
+  <ul class="repo-features">
+    <li>Core implementation (~5,000 lines of Python)</li>
+    <li>POP two-phase consensus engine</li>
+    <li>Relation Index module with Ftel metrics</li>
+    <li>Incremental Sync Engine with content fingerprinting</li>
+    <li>D3.js dashboard for graph visualization</li>
+    <li>Rust/PyO3 native extension skeleton</li>
+    <li>94 test cases with full coverage</li>
+    <li>This paper in both Markdown and rendered HTML</li>
+  </ul>
+</div>
+
 <div class="footer">
-  ChainDB v3.0 &middot; Relation Index + Persistent Ledger + Security Hardening &middot; 94/94 tests passing
+  ChainDB v3.1 &middot; Relation Index + Persistent Ledger + Security Hardening &middot; 94/94 tests passing &middot; 57 files, 10,600 lines
 </div>
 
 </div>
